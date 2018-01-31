@@ -1,0 +1,299 @@
+---
+title: "Machine Learning Peer Assessment"
+author: "Malli Nookala"
+date: "January 30, 2018"
+---
+
+## Summary
+This report uses machine learning algorithms to predict the manner in which users of exercise devices exercise. 
+
+### Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website [here:](http://groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset). 
+
+### Data 
+
+The training data for this project are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+### Goal of the assignment
+1. Predicting the manner in which the participants did the exercise. Refer to the "classe" variable in the training set. All other variables can be used as predictor.
+
+2. Show how the model was built, performed cross validation, and expectation of the sample error and reasons of choices made.
+
+3. Use the prediction model to predict 20 different test cases.
+
+### Load libraries
+```
+library(caret)
+library(rpart)
+library(randomForest)
+library(ElemStatLearn)
+library(corrplot)
+set.seed(888) # For research reproducibility purpose
+```
+
+### Preparation of Datasets
+
+```r
+traingUrl <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+traingFile <- "./data/pml-training.csv"
+testFile  <- "./data/pml-testing.csv"
+if (!file.exists("./data")) {
+  dir.create("./data")
+}
+if (!file.exists(traingFile)) {
+  download.file(traingUrl, destfile=traingFile)
+}
+if (!file.exists(testFile)) {
+  download.file(testUrl, destfile=testFile)
+}
+```
+
+### Read the Data
+After downloading the data from the data source, the two csv files are read into two data frames.
+```r
+traingRaw <- read.csv("./data/pml-training.csv",header=T,sep=",",na.strings=c("NA",""))
+testRaw <- read.csv("./data/pml-testing.csv",header=T,sep=",",na.strings=c("NA",""))
+dim(traingRaw)
+```
+
+```
+[1] 19622   160
+```
+```r
+dim(testRaw)
+```
+```
+[1]  20 160
+```
+
+The training data set contains 19622 observations and 160 variables, while the testing data set contains 20 observations and 160 variables. The "classe" variable in the training set is the outcome to predict.
+
+### Data Sets Partitioning Definitions
+The data partitions of training and validating data sets are created as below:
+
+```r
+traingRaw <- traingRaw[,-1] # Remove the first column that represents a ID Row
+inTrain = createDataPartition(traingRaw$classe, p=0.60, list=F)
+training = traingRaw[inTrain,]
+validating = traingRaw[-inTrain,]
+```
+
+### Data Cleaning
+Since a random forest model is chosen and the data set must first be checked on possibility of columns without data.
+
+The decision is made whereby all the columns that having less than 60% of data filled are removed.
+
+```r
+sum((colSums(!is.na(training[,-ncol(training)])) < 0.6*nrow(training))) # Number of columns with less than 60% of data
+```
+
+```
+[1] 100
+```
+Next, the criteria to remove columns that do not satisfy is applied before applying to the model.
+
+```r
+Keep <- c((colSums(!is.na(training[,-ncol(training)])) >= 0.6*nrow(training)))
+training   <-  training[,Keep]
+validating <- validating[,Keep]
+```
+
+### Modeling
+In random forests, there is no need for cross-validation or a separate test set to get an unbiased estimate of the test set error. It is estimated internally, during the execution. Therefore, the training of the model (Random Forest) is proceeded using the training data set.
+
+```r
+model <- randomForest(classe~.,data=training)
+model
+```
+```
+## Call:
+## randomForest(formula = classe ~ ., data = training) 
+##               Type of random forest: classification
+##                     Number of trees: 500
+## No. of variables tried at each split: 7
+
+##        OOB estimate of  error rate: 0.17%
+## Confusion matrix:
+##     A    B    C    D    E  class.error
+## A 3347    1    0    0    0 0.0002986858
+## B    3 2276    0    0    0 0.0013163668
+## C    0    4 2047    3    0 0.0034079844
+## D    0    0    4 1924    2 0.0031088083
+## E    0    0    0    3 2162 0.0013856813
+```
+
+### Model Evaluation
+Verification of the variable importance measures as produced by random Forest is as follows:
+
+```r
+importance(model)
+```
+
+```
+##                      MeanDecreaseGini
+## user_name                  83.5575758
+## raw_timestamp_part_1      980.4344901
+## raw_timestamp_part_2       10.2904088
+## cvtd_timestamp           1411.3522950
+## new_window                  0.1402876
+## num_window                573.2066235
+## roll_belt                 521.3602853
+## pitch_belt                305.1022069
+## yaw_belt                  343.0173120
+## total_accel_belt          118.6749469
+## gyros_belt_x               40.7087733
+## gyros_belt_y               49.5573190
+## gyros_belt_z              104.6831282
+## accel_belt_x               60.5440835
+## accel_belt_y               69.2092773
+## accel_belt_z              207.5377986
+## magnet_belt_x             109.4956890
+## magnet_belt_y             194.2744199
+## magnet_belt_z             172.9929200
+## roll_arm                  109.7467540
+## pitch_arm                  52.2914921
+## yaw_arm                    79.5954491
+## total_accel_arm            26.8962196
+## gyros_arm_x                43.5268275
+## gyros_arm_y                42.7886053
+## gyros_arm_z                18.2439097
+## accel_arm_x                94.5655230
+## accel_arm_y                53.0088332
+## accel_arm_z                40.1345282
+## magnet_arm_x               89.6954482
+## magnet_arm_y               71.9235013
+## magnet_arm_z               55.3286400
+## roll_dumbbell             191.6747419
+## pitch_dumbbell             86.1776161
+## yaw_dumbbell              117.1977989
+## total_accel_dumbbell      116.9926309
+## gyros_dumbbell_x           40.0999473
+## gyros_dumbbell_y          103.0046319
+## gyros_dumbbell_z           23.4448107
+## accel_dumbbell_x          122.2479327
+## accel_dumbbell_y          186.2227892
+## accel_dumbbell_z          141.2366260
+## magnet_dumbbell_x         239.5183122
+## magnet_dumbbell_y         323.9958428
+## magnet_dumbbell_z         296.3035482
+## roll_forearm              222.3945663
+## pitch_forearm             291.7171207
+## yaw_forearm                53.0055715
+## total_accel_forearm        35.4900954
+## gyros_forearm_x            25.0782311
+## gyros_forearm_y            41.7948207
+## gyros_forearm_z            27.7114657
+## accel_forearm_x           122.1163266
+## accel_forearm_y            40.9975743
+## accel_forearm_z            89.3672125
+## magnet_forearm_x           73.0556709
+## magnet_forearm_y           74.3268443
+## magnet_forearm_z           90.4612716
+```
+
+Next, the model results is evaluated through the confusion Matrix.
+
+```r
+confusionMatrix(predict(model,newdata=validating[,-ncol(validating)]),validating$classe)
+```
+
+```
+## Confusion Matrix and Statistics
+## 
+##           Reference
+## Prediction    A    B    C    D    E
+##          A 2232    1    0    0    0
+##          B    0 1517    5    0    0
+##          C    0    0 1361    1    0
+##          D    0    0    2 1285    1
+##          E    0    0    0    0 1441
+## 
+## Overall Statistics
+##                                           
+##                Accuracy : 0.9987          
+##                  95% CI : (0.9977, 0.9994)
+##     No Information Rate : 0.2845          
+##     P-Value [Acc > NIR] : < 2.2e-16       
+##                                           
+##                   Kappa : 0.9984          
+##  Mcnemar's Test P-Value : NA              
+## 
+## Statistics by Class:
+## 
+##                      Class: A Class: B Class: C Class: D Class: E
+## Sensitivity            1.0000   0.9993   0.9949   0.9992   0.9993
+## Specificity            0.9998   0.9992   0.9998   0.9995   1.0000
+## Pos Pred Value         0.9996   0.9967   0.9993   0.9977   1.0000
+## Neg Pred Value         1.0000   0.9998   0.9989   0.9998   0.9998
+## Prevalence             0.2845   0.1935   0.1744   0.1639   0.1838
+## Detection Rate         0.2845   0.1933   0.1735   0.1638   0.1837
+## Detection Prevalence   0.2846   0.1940   0.1736   0.1642   0.1837
+## Balanced Accuracy      0.9999   0.9993   0.9974   0.9994   0.9997
+```
+
+The accurancy for the validating data set is calculated with the following formula:
+
+```r
+acrcy<-c(as.numeric(predict(model,newdata=validating[,-ncol(validating)])==validating$classe))
+acrcy<-sum(acrcy)*100/nrow(validating)
+```
+Model Accuracy as tested over Validation set = 99.8725465% The out-of-sample error is 0.13%, which is pretty low.
+
+### Model Test
+For the model testing, the new values are predicted using the testing dataset provided which was loaded earlier. Data cleaning was first performed and all columns of Testing data set are coerced for the same class of previous data set.
+
+```r
+testRaw <- testRaw[,-1] # Remove the first column that represents a ID Row
+testRaw <- testRaw[ , Keep] # Keep the same columns of testing dataset
+testRaw <- testRaw[,-ncol(testRaw)] # Remove the problem ID
+```r
+
+### Transformations and Coercing of Testing Dataset
+
+# Coerce testing dataset to same class and structure of training dataset 
+
+```r
+testing <- rbind(training[100, -59] , testRaw) 
+
+# Apply the ID Row to row.names and 100 for dummy row from testing dataset 
+row.names(testing) <- c(100, 1:20)
+```
+
+### Prediction with the Testing Dataset
+
+```r
+predictions <- predict(model,newdata=testing[-1,])
+predictions
+```
+
+```
+##  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 
+##  B  A  B  A  A  E  D  B  A  A  B  C  B  A  E  E  A  B  B  B 
+## Levels: A B C D E
+```
+
+### Generation of Answers Files for Assignment Submission
+
+The following function pml_write_files is to create the answers files for the Prediction Assignment Submission:
+
+```r
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("./answers/problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(predictions)
+```
+
+
